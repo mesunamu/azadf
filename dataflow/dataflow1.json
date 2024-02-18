@@ -1,0 +1,176 @@
+{
+	"name": "dataflow1",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"linkedService": {
+						"referenceName": "ls_src_sql_db",
+						"type": "LinkedServiceReference"
+					},
+					"name": "srcCust"
+				},
+				{
+					"linkedService": {
+						"referenceName": "ls_trg_sql_db",
+						"type": "LinkedServiceReference"
+					},
+					"name": "trgCust"
+				}
+			],
+			"sinks": [
+				{
+					"linkedService": {
+						"referenceName": "ls_trg_sql_db",
+						"type": "LinkedServiceReference"
+					},
+					"name": "insertTrgCust"
+				},
+				{
+					"linkedService": {
+						"referenceName": "ls_trg_sql_db",
+						"type": "LinkedServiceReference"
+					},
+					"name": "updateTrgCust"
+				}
+			],
+			"transformations": [
+				{
+					"name": "srcSelect"
+				},
+				{
+					"name": "trgSelect"
+				},
+				{
+					"name": "exists1"
+				},
+				{
+					"name": "derivedColumn1"
+				},
+				{
+					"name": "select1"
+				},
+				{
+					"name": "lookup1"
+				},
+				{
+					"name": "filter1"
+				},
+				{
+					"name": "derivedColumn2"
+				},
+				{
+					"name": "derivedColumn3"
+				},
+				{
+					"name": "select2"
+				},
+				{
+					"name": "alterRow1"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          custId as integer,",
+				"          name as string,",
+				"          location as string,",
+				"          comm as decimal(18,0)",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     format: 'query',",
+				"     store: 'sqlserver',",
+				"     query: 'select * from customer',",
+				"     isolationLevel: 'READ_UNCOMMITTED') ~> srcCust",
+				"source(output(",
+				"          custId as integer,",
+				"          name as string,",
+				"          location as string,",
+				"          comm as decimal(18,0),",
+				"          flag as integer",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     format: 'table',",
+				"     store: 'sqlserver',",
+				"     schemaName: 'dbo',",
+				"     tableName: 'customer',",
+				"     isolationLevel: 'READ_UNCOMMITTED') ~> trgCust",
+				"srcCust select(mapColumn(",
+				"          src_custId = custId,",
+				"          src_name = name,",
+				"          src_location = location,",
+				"          src_comm = comm",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> srcSelect",
+				"trgCust select(mapColumn(",
+				"          trg_custId = custId,",
+				"          trg_name = name,",
+				"          trg_location = location,",
+				"          trg_comm = comm",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> trgSelect",
+				"srcSelect, trgSelect exists(src_custId == trg_custId,",
+				"     negate:true,",
+				"     broadcast: 'auto')~> exists1",
+				"exists1 derive(flag = 0) ~> derivedColumn1",
+				"derivedColumn1 select(mapColumn(",
+				"          custId = src_custId,",
+				"          name = src_name,",
+				"          location = src_location,",
+				"          comm = src_comm,",
+				"          flag",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> select1",
+				"srcSelect, trgSelect lookup(src_custId == trg_custId,",
+				"     multiple: false,",
+				"     pickup: 'any',",
+				"     broadcast: 'auto')~> lookup1",
+				"derivedColumn2 filter(isUpdated==1) ~> filter1",
+				"lookup1 derive(isUpdated = iif(src_name!=trg_name || src_location!=trg_location,1,0)) ~> derivedColumn2",
+				"filter1 derive(flag = 1) ~> derivedColumn3",
+				"derivedColumn3 select(mapColumn(",
+				"          custId = src_custId,",
+				"          name = src_name,",
+				"          location = src_location,",
+				"          comm = src_comm,",
+				"          flag",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> select2",
+				"select2 alterRow(updateIf(1==1)) ~> alterRow1",
+				"select1 sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     format: 'table',",
+				"     store: 'sqlserver',",
+				"     schemaName: 'dbo',",
+				"     tableName: 'customer',",
+				"     insertable: true,",
+				"     updateable: false,",
+				"     deletable: false,",
+				"     upsertable: false,",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError') ~> insertTrgCust",
+				"alterRow1 sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     format: 'table',",
+				"     store: 'sqlserver',",
+				"     schemaName: 'dbo',",
+				"     tableName: 'customer',",
+				"     insertable: false,",
+				"     updateable: true,",
+				"     deletable: false,",
+				"     upsertable: false,",
+				"     keys:['custId'],",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     errorHandlingOption: 'stopOnFirstError') ~> updateTrgCust"
+			]
+		}
+	}
+}
